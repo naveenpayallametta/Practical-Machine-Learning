@@ -1,0 +1,128 @@
+---
+title: "Practical Machine Learning Project"
+author: "Naveen Payallametta"
+date: "October 21, 2016"
+output: html_document
+---
+###Practical Machine Learning Project : Prediction Assignment Writeup###
+
+**Introduction**
+
+***This document is the final report of the Peer Assessment project from Coursera's course Practical Machine Learning, as part of the Specialization in Data Science. It was built up in RStudio, using its knitr functions, meant to be published in html format.***
+***This analysis meant to be the basis for the course quiz and a prediction assignment writeup. The main goal of the project is to predict the manner in which 6 participants performed some exercise as described below. This is the "classe" variable in the training set. The machine learning algorithm described here is applied to the 20 test cases available in the test data and the predictions are submitted in appropriate format to the Course Project Prediction Quiz for automated grading.***
+
+**Project Overview**
+
+***Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).***
+
+
+***Loading the below libraries***
+```{r}
+library(ggplot2)
+library(randomForest)
+library(corrplot)
+```
+
+###Data Loading ###
+
+```{r}
+Traindataurl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+Testdataurl  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+# download the datasets
+training <- read.csv(url(Traindataurl))
+testing  <- read.csv(url(Testdataurl))
+
+# create a partition with the training dataset
+library(caret)
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+```
+
+###Cleaning the Data###
+
+***We found that there are some Missing values and NearZero Variance variables present in both the datasets***
+
+```{r}
+# Remove the missing values in the Training dataset
+RemoveNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, RemoveNA==FALSE]
+TestSet  <- TestSet[, RemoveNA==FALSE]
+
+# Remove the variables with Nearly Zero Variance in the Training dataset
+Zerovar <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -Zerovar]
+TestSet  <- TestSet[, -Zerovar]
+
+# Remove the first 5 unwanted variables "X" "user_name" "raw_timestamp_part_1" "raw_timestamp_part_2" #"cvtd_timestamp" for modelling process.
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+```
+
+***The final Training & Testing datasets came down to 54 variables out of 160***
+
+##Exploratory Data Analysis##
+
+```{r}
+library(ggplot2)
+qplot(roll_belt,pitch_belt, color=classe , data = TrainSet)
+qplot(roll_arm,pitch_arm,color=classe , data = TrainSet)
+qplot(roll_dumbbell,pitch_dumbbell, color=classe , data = TrainSet)
+qplot(roll_forearm,pitch_forearm,color=classe , data = TrainSet)
+
+#Corelation bewtween types of accelerator variables
+pairs(TrainSet$classe~roll_belt+total_accel_belt+total_accel_arm +total_accel_dumbbell+total_accel_forearm, data= TrainSet)
+```
+
+**Method1:Decision Tree Model**
+
+```{r}
+library(rpart)
+library(rattle)
+library(rpart.plot)
+set.seed(12345)
+DT_model<- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(DT_model)
+```
+
+
+***Now Predict the above Decision model results with the Validation dataset***
+
+```{r}
+# prediction on Test dataset
+predictDT_test <- predict(DT_model, newdata=TestSet, type = "class")
+
+# Perform Confusion Matrix Statistics on Testing dataset
+Conf_DT_Test <- confusionMatrix(predictDT_test, TestSet$classe)
+Conf_DT_Test
+```
+
+***The above result shows the Accuracy of Decision Model is about 74.6%***
+
+**Method2: Random Forest Model**
+
+```{r}
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+RF_model<- train(classe ~ ., data=TrainSet, method="rf", trControl=controlRF)
+RF_model$finalModel
+```
+
+***Now Predict the above Random Forest model results with the validation dataset***
+
+```{r}
+# prediction of RF model result on Test dataset
+predictRF_Test <- predict(RF_model, newdata=TestSet)
+conf_RF_Test <- confusionMatrix(predictRF_Test, TestSet$classe)
+conf_RF_Test
+```
+
+***The above result shows that the Accuracy of Random Forest Model is about 99.8%***
+
+***Since the Random Forest Model results show high accuracy, apply it onto the Testing data that was initially downloaded***
+```{r}
+predict_testdata <- predict(RF_model, newdata=testing)
+predict_testdata
+```
+
